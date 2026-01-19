@@ -27,6 +27,8 @@ clap = { version = "4.5", features = ["derive"] }
 
 tao = "0.34"
 tray-icon = "0.21"
+lodepng = { version = "3.12", default-features = false, features = ["rust_backend"] }
+rgb = "0.8"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-core-foundation = "0.3"

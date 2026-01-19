@@ -96,10 +96,6 @@ pub fn run_tray(command_tx: Sender<ControlCommand>) -> ! {
 }
 
 fn default_icon() -> tray_icon::Icon {
-    let rgba: Vec<u8> = vec![
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00,
-    ];
-
-    tray_icon::Icon::from_rgba(rgba, 2, 2).expect("invalid embedded icon")
+    const RGBA: &[u8] = include_bytes!("../assets/icon-tray-32.rgba");
+    tray_icon::Icon::from_rgba(RGBA.to_vec(), 32, 32).expect("invalid tray icon")
 }
