@@ -4,6 +4,17 @@ set -euo pipefail
 APP_NAME="EasyPassword"
 BUNDLE_ID="com.easypassword.app"
 
+VERSION="$(python - <<'PY'
+import re
+from pathlib import Path
+text = Path('Cargo.toml').read_text(encoding='utf-8')
+m = re.search(r'^version\s*=\s*"([^"]+)"\s*$', text, flags=re.M)
+if not m:
+    raise SystemExit('error: could not parse version from Cargo.toml')
+print(m.group(1))
+PY
+)"
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
 APP_DIR="$DIST_DIR/$APP_NAME.app"
@@ -43,9 +54,9 @@ cat > "$CONTENTS_DIR/Info.plist" <<EOF
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.1.0</string>
+  <string>${VERSION}</string>
   <key>CFBundleVersion</key>
-  <string>0.1.0</string>
+  <string>${VERSION}</string>
   <key>LSUIElement</key>
   <true/>
 </dict>
