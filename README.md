@@ -20,8 +20,8 @@ Type `;;github.com` anywhere → get a unique, reproducible password instantly.
 ### From Source
 
 ```bash
-git clone https://github.com/user/easypassword.git
-cd easypassword
+git clone https://github.com/Ezlmt/EasyPassword.git
+cd EasyPassword
 cargo build --release
 ```
 
@@ -164,7 +164,8 @@ The app includes a **Start on Login** feature that can be toggled via the system
 - No special permissions required.
 
 ### macOS
-- **Accessibility**: Requires permission to monitor keyboard and inject text (System Preferences → Security & Privacy → Privacy → Accessibility).
+- **Accessibility**: Required for text injection (System Settings → Privacy & Security → Accessibility).
+- **Input Monitoring**: Required for global keyboard monitoring (System Settings → Privacy & Security → Input Monitoring).
 - **Start on Login**: Implemented via LaunchAgent (`~/Library/LaunchAgents/com.easypassword.EasyPassword.plist`).
 
 ### Linux
