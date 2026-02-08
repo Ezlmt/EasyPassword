@@ -181,15 +181,10 @@ pub fn start_keyboard_listener(
                     return None;
                 }
 
-                if let Some(key) = keycode_to_key(keycode) {
-                    let name = get_unicode_string(event);
-                    log::debug!(
-                        "[MACOS-KEY] keycode={} -> {:?}, name={:?}",
-                        keycode,
-                        key,
-                        name
-                    );
+                let name = get_unicode_string(event);
+                let mapped_key = keycode_to_key(keycode);
 
+                if let Some(key) = mapped_key {
                     let rdev_event = rdev::Event {
                         time: std::time::SystemTime::now(),
                         name,
@@ -197,9 +192,8 @@ pub fn start_keyboard_listener(
                     };
 
                     if let Some(trigger) = detector.borrow_mut().process_event(&rdev_event) {
-                        log::info!("[SEND-MACOS] Sending trigger event: {:?}", trigger);
                         if let Err(e) = tx_clone.send(trigger) {
-                            log::error!("[ERROR-MACOS] Failed to send trigger: {}", e);
+                            log::error!("[LISTENER-MACOS] Failed to send trigger: {}", e);
                         }
                     }
                 }
@@ -211,7 +205,7 @@ pub fn start_keyboard_listener(
         let tap = match tap {
             Ok(tap) => tap,
             Err(()) => {
-                log::error!("[ERROR-MACOS] Failed to create CGEventTap. Make sure the app has Input Monitoring permissions in System Settings > Privacy & Security > Input Monitoring.");
+                log::error!("[LISTENER-MACOS] Failed to create CGEventTap. Make sure the app has Input Monitoring permissions in System Settings > Privacy & Security > Input Monitoring.");
                 loop {
                     thread::sleep(Duration::from_secs(5));
                     log::warn!("[LISTENER-MACOS] Waiting for Input Monitoring permission...");
@@ -228,7 +222,7 @@ pub fn start_keyboard_listener(
             let loop_source = match tap.mach_port.create_runloop_source(0) {
                 Ok(s) => s,
                 Err(e) => {
-                    log::error!("[ERROR-MACOS] failed to create runloop source: {:?}", e);
+                    log::error!("[LISTENER-MACOS] Failed to create runloop source: {:?}", e);
                     return;
                 }
             };
