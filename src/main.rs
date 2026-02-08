@@ -57,12 +57,14 @@ fn log_path() -> Option<PathBuf> {
 
 fn init_logging(verbose: bool) {
     let mut builder = if verbose {
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug"))
     } else {
         env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn"))
     };
 
-    if let Some(path) = log_path() {
+    if verbose {
+        builder.target(env_logger::Target::Stderr);
+    } else if let Some(path) = log_path() {
         if let Some(parent) = path.parent() {
             let _ = fs::create_dir_all(parent);
         }

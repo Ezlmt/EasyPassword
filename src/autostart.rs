@@ -99,10 +99,11 @@ fn enable() -> anyhow::Result<()> {
     let contents = macos_launch_agent_plist(&args);
     atomic_write(&plist_path, &contents)?;
 
-    // Best-effort: try to load immediately. Modern macOS may restrict this.
     let _ = std::process::Command::new("launchctl")
         .arg("load")
         .arg(&plist_path)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .status();
 
     Ok(())
@@ -112,10 +113,11 @@ fn enable() -> anyhow::Result<()> {
 fn disable() -> anyhow::Result<()> {
     let plist_path = macos_plist_path()?;
 
-    // Best-effort: unload immediately.
     let _ = std::process::Command::new("launchctl")
         .arg("unload")
         .arg(&plist_path)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .status();
 
     match fs::remove_file(&plist_path) {

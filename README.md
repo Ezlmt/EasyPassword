@@ -164,9 +164,28 @@ The app includes a **Start on Login** feature that can be toggled via the system
 - No special permissions required.
 
 ### macOS
-- **Accessibility**: Required for text injection (System Settings → Privacy & Security → Accessibility).
-- **Input Monitoring**: Required for global keyboard monitoring (System Settings → Privacy & Security → Input Monitoring).
-- **Start on Login**: Implemented via LaunchAgent (`~/Library/LaunchAgents/com.easypassword.EasyPassword.plist`).
+
+**Required Permissions** (both are mandatory):
+
+1. **Input Monitoring**: Required for global keyboard monitoring
+   - System Settings → Privacy & Security → Input Monitoring
+   
+2. **Accessibility**: Required for text injection
+   - System Settings → Privacy & Security → Accessibility
+
+**Important**: Add the correct application to both permission lists:
+- If running from **Terminal/Kitty/iTerm**: Add your terminal app (e.g., `Kitty.app`, `Terminal.app`)
+- If running the **`.app` bundle**: Add `EasyPassword.app`
+
+After granting permissions, **restart the app** (or terminal) for changes to take effect.
+
+**Building macOS App Bundle**:
+```bash
+./scripts/macos-bundle.sh
+```
+This creates `dist/EasyPassword.app` which can be moved to `/Applications`.
+
+**Start on Login**: Implemented via LaunchAgent (`~/Library/LaunchAgents/com.easypassword.EasyPassword.plist`).
 
 ### Linux
 - **Start on Login**: Implemented via XDG Autostart (`~/.config/autostart/easypassword.desktop`).
@@ -180,14 +199,16 @@ Check error message. Most common cause: `master_key` not set in config.
 ### Trigger not detected
 
 1. Run with verbose flag: `./easypassword -v`
-2. Check console for key events
+2. Check console for key events (look for `[MACOS-KEY]` or `[KEY]` logs)
 3. Ensure terminator (Space/Enter/Tab) is pressed after trigger
+4. **macOS**: Verify Input Monitoring permission is granted to the correct app (terminal or .app bundle)
 
 ### Password not injected
 
 1. Some applications block simulated input
-2. Try a different application (Notepad, browser URL bar)
+2. Try a different application (Notepad, browser URL bar, TextEdit)
 3. Check console for injection errors
+4. **macOS**: Verify Accessibility permission is granted to the correct app
 
 ### Start on login not working
 On macOS and Linux, the autostart configuration may require a logout and re-login to take effect for the first time.
