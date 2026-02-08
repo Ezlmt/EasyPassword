@@ -151,6 +151,8 @@ fn worker_loop(
     command_rx: Receiver<ControlCommand>,
     tray_update_tx: Sender<TrayUpdate>,
 ) {
+
+    // Load the config, if it fails, use the default config
     let mut config = match Config::load() {
         Ok(c) => c,
         Err(e) => {
@@ -159,6 +161,7 @@ fn worker_loop(
         }
     };
 
+    // get the current autostart setting
     if let Err(e) = autostart::set_enabled(config.default.autostart) {
         log::error!("failed to apply autostart setting: {}", e);
     }
@@ -170,6 +173,8 @@ fn worker_loop(
         .filter(|k| !k.is_empty())
         .map(str::to_string);
 
+    // AtomicBool is a thread-safe boolean
+    // Pre
     let injection_active = Arc::new(AtomicBool::new(false));
 
     let triggers = vec![

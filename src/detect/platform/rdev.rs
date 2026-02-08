@@ -16,12 +16,12 @@ pub fn start_keyboard_listener(
     injection_active: Arc<AtomicBool>,
 ) -> Result<thread::JoinHandle<()>> {
     let handle = thread::spawn(move || {
-        let mut detector = TriggerDetector::new(triggers.clone(), injection_active);
-
         log::info!(
             "[LISTENER] Keyboard listener started, triggers: {:?}",
             triggers
         );
+
+        let mut detector = TriggerDetector::new(triggers, injection_active);
 
         let callback = move |event: Event| {
             if let Some(trigger) = detector.process_event(&event) {
