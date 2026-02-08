@@ -7,7 +7,7 @@ use std::time::Duration;
 use crate::error::{EasyPasswordError, Result};
 
 #[cfg(target_os = "macos")]
-const KEYSTROKE_DELAY_MS: u64 = 10;
+const KEYSTROKE_DELAY_MS: u64 = 5;
 
 #[cfg(target_os = "windows")]
 const KEYSTROKE_DELAY_MS: u64 = 2;
@@ -17,7 +17,7 @@ const KEYSTROKE_DELAY_MS: u64 = 5;
 
 // A small guard delay around injection to reduce self-triggering and to give
 // the target application a moment to process backspaces before typing.
-const INJECTION_GUARD_DELAY_MS: u64 = 20;
+const INJECTION_GUARD_DELAY_MS: u64 = 10;
 
 pub struct TextInjector {
     enigo: Enigo,
