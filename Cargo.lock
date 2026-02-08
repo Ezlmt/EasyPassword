@@ -585,6 +585,7 @@ dependencies = [
  "dirs 5.0.1",
  "enigo",
  "env_logger",
+ "foreign-types 0.5.0",
  "lodepng",
  "log",
  "objc2-core-foundation",
