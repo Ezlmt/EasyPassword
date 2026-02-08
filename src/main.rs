@@ -83,7 +83,7 @@ fn handle_trigger(
     injector: &mut TextInjector,
     trigger: TriggerEvent,
 ) {
-    log::info!("[HANDLE] Received trigger: {:?}", trigger);
+    log::debug!("trigger received: {:?}", trigger);
 
     let mut password_config = config.get_password_config(&trigger.site);
 
@@ -101,15 +101,12 @@ fn handle_trigger(
         return;
     };
 
-    log::info!("[HANDLE] Generating password for site={}", trigger.site);
-
     match generate_password(master_key, &trigger.site, counter, &password_config) {
         Ok(password) => {
-            log::info!("[HANDLE] Password generated, injecting...");
             if let Err(e) = injector.replace_trigger(trigger.trigger_len, &password) {
                 log::error!("injection failed (site={}): {}", trigger.site, e);
             } else {
-                log::info!("[HANDLE] Injection successful");
+                log::debug!("password injected for site={}", trigger.site);
             }
         }
         Err(e) => {
@@ -153,7 +150,6 @@ fn worker_loop(
     command_rx: Receiver<ControlCommand>,
     tray_update_tx: Sender<TrayUpdate>,
 ) {
-
     // Load the config, if it fails, use the default config
     let mut config = match Config::load() {
         Ok(c) => c,
