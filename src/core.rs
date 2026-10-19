@@ -341,14 +341,20 @@ mod tests {
         (16, r#"RQMT`Gl*q:$3*xqM"#),
         (20, r#"#7YRQMT`l*q:$qMcHB</"#),
         (32, r#"!0AaRQMT`l*q:$qMHB</o]ndaaaaaaaa"#),
-        (64, r#"!0AaRQMT`l*q:$qMHB</o]ndaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"#),
+        (
+            64,
+            r#"!0AaRQMT`l*q:$qMHB</o]ndaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"#,
+        ),
     ];
     const V2_GOLDEN: &[(usize, &str)] = &[
         (8, r#"-4!ePqNK"#),
         (16, r#"^qNF7lo]AbZ@F[hL"#),
         (20, r#"PM!ArRmSH(5&^dJMB8y-"#),
         (32, r#"H<8{C<hP'"MaJ+'iaN5R/fiv}_Qc5*MH"#),
-        (64, r#"9{e}dL:7Pc`?:+A,w2c^D;\A'W\xC-4ncK4R"a|r\-`1jd1_k!_;w_|u:G7-%``&"#),
+        (
+            64,
+            r#"9{e}dL:7Pc`?:+A,w2c^D;\A'W\xC-4ncK4R"a|r\-`1jd1_k!_;w_|u:G7-%``&"#,
+        ),
     ];
 
     fn v1() -> PasswordConfig {
