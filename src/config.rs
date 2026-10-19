@@ -151,16 +151,19 @@ impl Config {
         let without_www = site_lower.strip_prefix("www.").unwrap_or(&site_lower);
         let first_label = without_www.split('.').next().unwrap_or(without_www);
 
-        [site_lower.as_str(), without_www, first_label]
-            .into_iter()
-            .find_map(|candidate| {
-                self.sites.get(candidate).or_else(|| {
-                    self.sites
-                        .iter()
-                        .find(|(key, _)| key.to_lowercase() == candidate)
-                        .map(|(_, cfg)| cfg)
-                })
-            })
+        for candidate in [site_lower.as_str(), without_www, first_label] {
+            if let Some(cfg) = self.sites.get(candidate) {
+                return Some(cfg);
+            }
+            if let Some((_, cfg)) = self
+                .sites
+                .iter()
+                .find(|(key, _)| key.to_lowercase() == candidate)
+            {
+                return Some(cfg);
+            }
+        }
+        None
     }
 
     pub fn get_password_config(&self, site: &str) -> PasswordConfig {
