@@ -15,6 +15,7 @@ use core_graphics::event::{
 };
 use foreign_types::ForeignType;
 
+use crate::config::Terminator;
 use crate::core::GenerationMode;
 use crate::error::Result;
 
@@ -103,22 +104,27 @@ fn keycode_to_key(keycode: u16) -> Option<rdev::Key> {
         50 => Some(rdev::Key::BackQuote),
 
         36 => Some(rdev::Key::Return),
+        76 => Some(rdev::Key::KpReturn),
         48 => Some(rdev::Key::Tab),
         49 => Some(rdev::Key::Space),
         51 => Some(rdev::Key::Backspace),
 
-        _ => None,
+        // Anything else (arrows, Esc, Delete, Home/End, F-keys, keypad...) is
+        // forwarded as Unknown so the detector can reset its buffer.
+        other => Some(rdev::Key::Unknown(other as u32)),
     }
 }
 
 pub fn start_keyboard_listener(
     tx: Sender<TriggerEvent>,
     triggers: Vec<(String, GenerationMode)>,
+    terminators: Vec<Terminator>,
     injection_active: Arc<AtomicBool>,
 ) -> Result<thread::JoinHandle<()>> {
     let handle = thread::spawn(move || {
         let detector = RefCell::new(TriggerDetector::new(
             triggers.clone(),
+            terminators,
             injection_active.clone(),
         ));
 
@@ -138,7 +144,12 @@ pub fn start_keyboard_listener(
             CGEventTapLocation::Session,
             CGEventTapPlacement::HeadInsertEventTap,
             CGEventTapOptions::ListenOnly,
-            vec![CGEventType::KeyDown],
+            vec![
+                CGEventType::KeyDown,
+                CGEventType::LeftMouseDown,
+                CGEventType::RightMouseDown,
+                CGEventType::OtherMouseDown,
+            ],
             move |_proxy, event_type, event: &CGEvent| {
                 if matches!(
                     event_type,
@@ -164,6 +175,17 @@ pub fn start_keyboard_listener(
                     return None;
                 }
 
+                // Clicks move the caret / focus: drop any partially typed trigger.
+                if matches!(
+                    event_type,
+                    CGEventType::LeftMouseDown
+                        | CGEventType::RightMouseDown
+                        | CGEventType::OtherMouseDown
+                ) {
+                    detector.borrow_mut().reset();
+                    return None;
+                }
+
                 let is_autorepeat =
                     event.get_integer_value_field(EventField::KEYBOARD_EVENT_AUTOREPEAT) != 0;
                 if is_autorepeat {
@@ -174,10 +196,14 @@ pub fn start_keyboard_listener(
                     event.get_integer_value_field(EventField::KEYBOARD_EVENT_KEYCODE) as u16;
                 let flags = event.get_flags();
 
+                // Shortcuts (Cmd+V, Ctrl+A, ...) edit text in ways we can't track.
                 if flags.contains(CGEventFlags::CGEventFlagCommand)
                     || flags.contains(CGEventFlags::CGEventFlagControl)
-                    || flags.contains(CGEventFlags::CGEventFlagAlternate)
                 {
+                    detector.borrow_mut().reset();
+                    return None;
+                }
+                if flags.contains(CGEventFlags::CGEventFlagAlternate) {
                     return None;
                 }
 

@@ -41,7 +41,10 @@ Create `config.toml` at:
 ```toml
 [default]
 master_key = "your-secret-master-key"
+algorithm = "v2"
 ```
+
+(If the file doesn't exist, the app creates one on first launch with `algorithm = "v2"`; you only need to fill in `master_key`.)
 
 ### 2. Run
 
@@ -71,7 +74,7 @@ The trigger text will be replaced with your generated password.
 |-----------|---------|-------------|
 | Prefix | `;;` | Configurable trigger prefix |
 | Site | - | Domain or identifier (e.g., `github.com`) |
-| Terminator | Space/Enter/Tab | Triggers password generation |
+| Terminator | Space | Triggers password generation (configurable via `terminators`) |
 
 ### Examples
 
@@ -86,6 +89,8 @@ The trigger text will be replaced with your generated password.
 
 > **Note**: Site names are case-insensitive (`GitHub.com` = `github.com`)
 
+> **Note**: Moving the caret (arrow keys, Esc, mouse click, Cmd/Ctrl shortcuts) cancels a partially typed trigger, so the password is never injected into the wrong place.
+
 ## Configuration
 
 ### Full Example
@@ -93,6 +98,8 @@ The trigger text will be replaced with your generated password.
 ```toml
 [default]
 master_key = "your-secret-master-key"
+algorithm = "v2"             # See "Algorithm versions" below
+terminators = ["space"]      # Any of "space", "enter", "tab"
 trigger_prefix = ";;"        # Triggers Argon2id mode
 concat_trigger_prefix = "!!" # Triggers Concatenation mode
 length = 16
@@ -102,10 +109,15 @@ digits = true
 symbols = true
 autostart = false            # Start on system login
 
-# Per-site overrides
+# Per-site overrides. With algorithm = "v2", [sites.github] matches
+# github.com and www.github.com too (an exact [sites."github.com"] wins).
 [sites.github]
 length = 20
 symbols = false
+
+# Keep an existing account on the legacy algorithm
+[sites.old-bank]
+algorithm = "v1"
 
 # You can also force a specific mode for a site regardless of trigger
 [sites.legacy-app]
@@ -127,13 +139,28 @@ mode = "concatenation"
 | `symbols` | boolean | true | Include symbols (!@#$%...) |
 | `counter` | integer | 1 | Password version (increment to rotate) |
 | `autostart` | boolean | false | Automatically start on system login |
+| `algorithm` | string | `"v1"` if missing, `"v2"` in newly created configs | Derivation algorithm (also per-site) |
+| `terminators` | list | `["space"]` | Keys that end a trigger: `space`, `enter`, `tab` |
+
+> **Why only Space by default?** The terminator key is still delivered to the focused app. Enter would submit the form with the trigger text, and Tab would move focus so the backspaces land in the wrong field. Enable them only if you know your workflow tolerates it.
+
+### Algorithm versions
+
+| Version | Status | Notes |
+|---------|--------|-------|
+| `v1` | Legacy | Uses only 128 bits of the Argon2 output. Passwords of length ≥ 16 have biased character positions, and long ones degenerate (length 32 always starts with `!0Aa` and ends with `aaaaaaaa`). |
+| `v2` | Recommended | Uses the full Argon2 output (≥ 64 bytes, scaled with length) and a domain-separated salt bound to the length. |
+
+> [!IMPORTANT]
+> Switching `algorithm` changes **every** generated password. To migrate, set `algorithm = "v2"` under `[default]` and add `algorithm = "v1"` to `[sites.<name>]` for accounts you have not rotated yet. Configs without an `algorithm` key keep using `v1`, so upgrading the app never changes your passwords silently.
 
 ## How It Works
 
 ### Password Generation
 
 ```
-password = render(Argon2id(master_key, SHA256(site || counter)))
+v1: password = render(Argon2id(master_key, SHA256(site || counter)))
+v2: password = render(Argon2id(master_key, SHA256("easypassword/v2\0" || site || "\0" || counter || length)))
 ```
 
 1. Combine site name and counter into a salt
@@ -200,7 +227,7 @@ Check error message. Most common cause: `master_key` not set in config.
 
 1. Run with verbose flag: `./easypassword -v`
 2. Check console for key events (look for `[MACOS-KEY]` or `[KEY]` logs)
-3. Ensure terminator (Space/Enter/Tab) is pressed after trigger
+3. Ensure a configured terminator (Space by default) is pressed after the trigger, without moving the caret in between
 4. **macOS**: Verify Input Monitoring permission is granted to the correct app (terminal or .app bundle)
 
 ### Password not injected
@@ -226,7 +253,7 @@ Options:
 
 ## Security Considerations
 
-- **Master key**: Store config file securely; it contains your master key
+- **Master key**: Store config file securely; it contains your master key (on macOS/Linux it is written with `0600` permissions)
 - **Memory**: Master key is held in memory while running
 - **Local only**: No network requests, no telemetry, no cloud
 - **Open source**: Audit the code yourself

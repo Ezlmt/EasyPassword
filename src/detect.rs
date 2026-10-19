@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use rdev::{Event, EventType, Key};
 
+use crate::config::Terminator;
 use crate::core::GenerationMode;
 use crate::error::Result;
 
@@ -27,15 +28,21 @@ pub(crate) struct TriggerDetector {
     state: DetectorState,
     buffer: String,
     triggers: Vec<(String, GenerationMode)>,
+    terminators: Vec<Terminator>,
     injection_active: Arc<AtomicBool>,
 }
 
 impl TriggerDetector {
-    pub fn new(triggers: Vec<(String, GenerationMode)>, injection_active: Arc<AtomicBool>) -> Self {
+    pub fn new(
+        triggers: Vec<(String, GenerationMode)>,
+        terminators: Vec<Terminator>,
+        injection_active: Arc<AtomicBool>,
+    ) -> Self {
         Self {
             state: DetectorState::Idle,
             buffer: String::new(),
             triggers,
+            terminators,
             injection_active,
         }
     }
@@ -61,6 +68,12 @@ impl TriggerDetector {
                 log::debug!("[KEY] Release: {:?}", key);
                 None
             }
+            EventType::ButtonPress(_) => {
+                // A click usually moves the caret / focus: whatever was typed
+                // so far is no longer guaranteed to sit right before the caret.
+                self.reset();
+                None
+            }
             _ => None,
         }
     }
@@ -72,83 +85,78 @@ impl TriggerDetector {
             return None;
         }
 
-        if is_terminator(key) {
+        if is_modifier(key) {
+            return None;
+        }
+
+        if self.is_terminator(key) {
             log::debug!("[TERMINATOR] {:?} pressed, checking trigger...", key);
             return self.handle_terminator();
         }
 
         let ch = match &event.name {
-            Some(name) if !name.is_empty() => {
-                let c = name.chars().next();
-                log::debug!("[CHAR] from event.name: {:?}", c);
-                c?
-            }
-            _ => {
-                let c = key_to_char(key);
-                log::debug!("[CHAR] from key_to_char: {:?}", c);
-                c?
-            }
-        };
+            Some(name) if !name.is_empty() => name.chars().next(),
+            _ => key_to_char(key),
+        }
+        .filter(|c| is_text_char(*c));
 
-        self.process_char(ch)
+        match ch {
+            Some(ch) => self.process_char(ch),
+            None => {
+                // Navigation / editing keys (arrows, Esc, Delete, Home, Enter
+                // when not a terminator, Ctrl+X ...) invalidate the buffer.
+                log::debug!("[KEY] non-text key {:?}, resetting", key);
+                self.reset();
+                None
+            }
+        }
+    }
+
+    fn is_terminator(&self, key: Key) -> bool {
+        self.terminators.iter().any(|t| match t {
+            Terminator::Space => key == Key::Space,
+            Terminator::Enter => matches!(key, Key::Return | Key::KpReturn),
+            Terminator::Tab => key == Key::Tab,
+        })
     }
 
     fn process_char(&mut self, ch: char) -> Option<TriggerEvent> {
-        match self.state {
-            DetectorState::Idle => {
-                self.buffer.clear();
+        if let DetectorState::CollectingSite(..) = self.state {
+            if is_valid_site_char(ch) {
                 self.buffer.push(ch);
-                if self.check_prefixes() {
-                    self.state = DetectorState::ScanningPrefix;
-                    log::debug!(
-                        "[STATE] Idle -> ScanningPrefix | buffer: \"{}\"",
-                        self.buffer
-                    );
-                } else {
-                    // Not a start of any prefix
-                    self.buffer.clear();
-                }
-                None
+                log::debug!("[COLLECT] buffer: \"{}\"", self.buffer);
+                return None;
             }
-            DetectorState::ScanningPrefix => {
-                self.buffer.push(ch);
+        }
 
-                // Check if we matched a full prefix
-                if let Some((mode, len)) = self.check_full_match() {
-                    self.state = DetectorState::CollectingSite(mode, len);
-                    log::debug!(
-                        "[STATE] ScanningPrefix -> CollectingSite({:?}) | buffer: \"{}\"",
-                        mode,
-                        self.buffer
-                    );
-                    return None;
-                }
+        // Idle, scanning a prefix, or an invalid site char: append and look for
+        // the longest suffix that can still start a trigger, so that e.g.
+        // "!;;site" and ";;;site" are recognised.
+        self.buffer.push(ch);
+        self.rescan();
+        log::debug!("[STATE] {:?} | buffer: \"{}\"", self.state, self.buffer);
+        None
+    }
 
-                // Check if we are still matching a prefix
-                if self.check_prefixes() {
-                    log::debug!(
-                        "[STATE] ScanningPrefix continue | buffer: \"{}\"",
-                        self.buffer
-                    );
-                } else {
-                    log::debug!("[STATE] ScanningPrefix -> Idle (mismatch) | resetting");
-                    self.reset();
-                }
-                None
+    /// Shrinks the buffer to its longest suffix that is (a prefix of) a trigger
+    /// prefix and updates the state accordingly.
+    fn rescan(&mut self) {
+        loop {
+            if self.buffer.is_empty() {
+                self.state = DetectorState::Idle;
+                return;
             }
-            DetectorState::CollectingSite(_mode, _) => {
-                if is_valid_site_char(ch) {
-                    self.buffer.push(ch);
-                    log::debug!("[COLLECT] buffer: \"{}\"", self.buffer);
-                } else {
-                    log::debug!(
-                        "[STATE] CollectingSite -> Idle (invalid char: '{}') | resetting",
-                        ch
-                    );
-                    self.reset();
-                }
-                None
+            if let Some((mode, len)) = self.check_full_match() {
+                self.state = DetectorState::CollectingSite(mode, len);
+                return;
             }
+            if self.check_prefixes() {
+                self.state = DetectorState::ScanningPrefix;
+                return;
+            }
+            let mut chars = self.buffer.chars();
+            chars.next();
+            self.buffer = chars.as_str().to_string();
         }
     }
 
@@ -197,32 +205,24 @@ impl TriggerDetector {
         None
     }
 
-    fn reset(&mut self) {
+    pub(crate) fn reset(&mut self) {
         self.state = DetectorState::Idle;
         self.buffer.clear();
     }
 
     fn handle_backspace(&mut self) {
-        if !self.buffer.is_empty() && self.state != DetectorState::Idle {
-            self.buffer.pop();
+        if self.buffer.is_empty() || self.state == DetectorState::Idle {
+            return;
+        }
+        self.buffer.pop();
 
-            // Re-evaluate state based on new buffer content
-            if self.buffer.is_empty() {
-                self.reset();
+        if let DetectorState::CollectingSite(_, prefix_len) = self.state {
+            if self.buffer.len() >= prefix_len {
                 return;
             }
-
-            // Check if we are still collecting site or moved back to prefix scanning
-            if let DetectorState::CollectingSite(_, prefix_len) = self.state {
-                if self.buffer.len() < prefix_len {
-                    // We backspaced into the prefix.
-                    // For simplicity, just reset to avoid complex state transitions backwards.
-                    self.reset();
-                }
-            } else if self.state == DetectorState::ScanningPrefix && !self.check_prefixes() {
-                self.reset();
-            }
         }
+        // Backspaced into (or within) the prefix: recompute the state.
+        self.rescan();
     }
 }
 
@@ -238,7 +238,7 @@ mod tests {
             ("!!".to_string(), GenerationMode::Concatenation),
         ];
         let injection = Arc::new(AtomicBool::new(false));
-        let mut detector = TriggerDetector::new(triggers, injection);
+        let mut detector = TriggerDetector::new(triggers, vec![Terminator::Space], injection);
 
         let events = vec![
             EventType::KeyPress(Key::SemiColon),
@@ -308,10 +308,132 @@ mod tests {
         assert_eq!(t.site, "a");
         assert_eq!(t.mode, GenerationMode::Concatenation);
     }
+
+    fn detector(terminators: Vec<Terminator>) -> TriggerDetector {
+        TriggerDetector::new(
+            vec![
+                (";;".to_string(), GenerationMode::Argon2id),
+                ("!!".to_string(), GenerationMode::Concatenation),
+            ],
+            terminators,
+            Arc::new(AtomicBool::new(false)),
+        )
+    }
+
+    fn key_event(key: Key, name: Option<&str>) -> Event {
+        Event {
+            time: std::time::SystemTime::now(),
+            name: name.map(str::to_string),
+            event_type: EventType::KeyPress(key),
+        }
+    }
+
+    /// Types `text`; `\x08` = Backspace, `\n` = Enter, `\t` = Tab,
+    /// `\x1b` = Escape, `\x01` = mouse click.
+    fn type_text(d: &mut TriggerDetector, text: &str) -> Option<TriggerEvent> {
+        let mut found = None;
+        for c in text.chars() {
+            let event = match c {
+                ' ' => key_event(Key::Space, Some(" ")),
+                '\x08' => key_event(Key::Backspace, None),
+                '\n' => key_event(Key::Return, Some("\r")),
+                '\t' => key_event(Key::Tab, Some("\t")),
+                '\x1b' => key_event(Key::Escape, None),
+                '\x01' => Event {
+                    time: std::time::SystemTime::now(),
+                    name: None,
+                    event_type: EventType::ButtonPress(rdev::Button::Left),
+                },
+                c => key_event(Key::Unknown(0), Some(&c.to_string())),
+            };
+            if let Some(t) = d.process_event(&event) {
+                found = Some(t);
+            }
+        }
+        found
+    }
+
+    #[test]
+    fn trigger_len_counts_prefix_site_and_terminator() {
+        let mut d = detector(vec![Terminator::Space]);
+        let t = type_text(&mut d, "hello ;;github.com ").unwrap();
+        assert_eq!(t.site, "github.com");
+        assert_eq!(t.trigger_len, ";;github.com ".len());
+    }
+
+    #[test]
+    fn prefix_recovers_after_partial_mismatch() {
+        let mut d = detector(vec![Terminator::Space]);
+        assert_eq!(type_text(&mut d, "!;;site ").unwrap().site, "site");
+        assert_eq!(type_text(&mut d, ";;;site ").unwrap().site, "site");
+        assert_eq!(type_text(&mut d, "a;;x;;site ").unwrap().site, "site");
+    }
+
+    #[test]
+    fn enter_and_tab_are_not_terminators_by_default() {
+        let mut d = detector(vec![Terminator::Space]);
+        assert!(type_text(&mut d, ";;site\n").is_none());
+        assert!(type_text(&mut d, ";;site\t").is_none());
+        // ...and they invalidate the pending trigger.
+        assert!(type_text(&mut d, ";;site\nx ").is_none());
+    }
+
+    #[test]
+    fn enter_can_be_enabled() {
+        let mut d = detector(vec![Terminator::Space, Terminator::Enter]);
+        assert_eq!(type_text(&mut d, ";;site\n").unwrap().site, "site");
+    }
+
+    #[test]
+    fn navigation_and_clicks_reset() {
+        let mut d = detector(vec![Terminator::Space]);
+        assert!(type_text(&mut d, ";;git\x1bhub ").is_none());
+        assert!(type_text(&mut d, ";;git\x01hub ").is_none());
+    }
+
+    #[test]
+    fn backspace_into_prefix_and_retype() {
+        let mut d = detector(vec![Terminator::Space]);
+        let t = type_text(&mut d, ";;ab\x08\x08\x08;site ").unwrap();
+        assert_eq!(t.site, "site");
+        let t = type_text(&mut d, ";;githuv\x08b ").unwrap();
+        assert_eq!(t.site, "github");
+    }
+
+    #[test]
+    fn modifiers_do_not_reset() {
+        let mut d = detector(vec![Terminator::Space]);
+        type_text(&mut d, ";;git");
+        d.process_event(&key_event(Key::ShiftLeft, None));
+        let t = type_text(&mut d, "Hub ").unwrap();
+        assert_eq!(t.site, "gitHub");
+    }
 }
 
 fn is_valid_site_char(ch: char) -> bool {
     ch.is_ascii_alphanumeric() || ch == '.' || ch == '-' || ch == '_' || ch == '!' || ch == '@'
+}
+
+/// Printable characters only: excludes control chars (Enter, Tab, Esc, Ctrl+X)
+/// and the macOS private-use range used for arrows / function keys.
+fn is_text_char(ch: char) -> bool {
+    !ch.is_control() && !('\u{F700}'..='\u{F8FF}').contains(&ch)
+}
+
+fn is_modifier(key: Key) -> bool {
+    matches!(
+        key,
+        Key::ShiftLeft
+            | Key::ShiftRight
+            | Key::CapsLock
+            | Key::ControlLeft
+            | Key::ControlRight
+            | Key::Alt
+            | Key::AltGr
+            | Key::MetaLeft
+            | Key::MetaRight
+            | Key::Function
+    )
 }
 
 fn key_to_char(key: Key) -> Option<char> {
@@ -367,14 +489,11 @@ fn key_to_char(key: Key) -> Option<char> {
     }
 }
 
-fn is_terminator(key: Key) -> bool {
-    matches!(key, Key::Space | Key::Return | Key::Tab)
-}
-
 pub fn start_keyboard_listener(
     tx: Sender<TriggerEvent>,
     triggers: Vec<(String, GenerationMode)>,
+    terminators: Vec<Terminator>,
     injection_active: Arc<AtomicBool>,
 ) -> Result<std::thread::JoinHandle<()>> {
-    platform::start_keyboard_listener(tx, triggers, injection_active)
+    platform::start_keyboard_listener(tx, triggers, terminators, injection_active)
 }

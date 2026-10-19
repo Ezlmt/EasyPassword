@@ -5,6 +5,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::thread;
 
+use crate::config::Terminator;
 use crate::core::GenerationMode;
 use crate::error::Result;
 
@@ -13,6 +14,7 @@ use super::super::{TriggerDetector, TriggerEvent};
 pub fn start_keyboard_listener(
     tx: Sender<TriggerEvent>,
     triggers: Vec<(String, GenerationMode)>,
+    terminators: Vec<Terminator>,
     injection_active: Arc<AtomicBool>,
 ) -> Result<thread::JoinHandle<()>> {
     let handle = thread::spawn(move || {
@@ -21,7 +23,7 @@ pub fn start_keyboard_listener(
             triggers
         );
 
-        let mut detector = TriggerDetector::new(triggers, injection_active);
+        let mut detector = TriggerDetector::new(triggers, terminators, injection_active);
 
         let callback = move |event: Event| {
             if let Some(trigger) = detector.process_event(&event) {
