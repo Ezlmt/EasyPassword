@@ -1,5 +1,8 @@
 [default]
 master_key = "your_secret_master_key_here"
+# "v2" is recommended. Configs without this key use the legacy "v1" so that
+# upgrading never silently changes existing passwords.
+algorithm = "v2"
 autostart = false
 length = 16
 lowercase = true
@@ -7,7 +10,11 @@ uppercase = true
 digits = true
 symbols = true
 trigger_prefix = ";;"
+concat_trigger_prefix = "!!"
+# Keys that end a trigger: "space", "enter", "tab"
+terminators = ["space"]
 
+# Matches github.com / www.github.com (v2)
 [sites.github]
 length = 20
 symbols = false
@@ -15,3 +22,7 @@ symbols = false
 [sites.bank]
 length = 24
 counter = 2
+
+# Existing account still using the legacy algorithm
+[sites.old-forum]
+algorithm = "v1"

@@ -12,10 +12,11 @@ use std::thread;
 
 use clap::Parser;
 use crossbeam_channel::{select, unbounded, Receiver, Sender};
+use zeroize::{Zeroize, Zeroizing};
 
 use std::process::Command;
 
-use easypassword::core::GenerationMode;
+use easypassword::core::{AlgorithmVersion, GenerationMode};
 use easypassword::{
     generate_password, start_keyboard_listener, Config, TextInjector, TriggerEvent,
 };
@@ -102,12 +103,13 @@ fn handle_trigger(
     };
 
     match generate_password(master_key, &trigger.site, counter, &password_config) {
-        Ok(password) => {
+        Ok(mut password) => {
             if let Err(e) = injector.replace_trigger(trigger.trigger_len, &password) {
                 log::error!("injection failed (site={}): {}", trigger.site, e);
             } else {
                 log::debug!("password injected for site={}", trigger.site);
             }
+            password.zeroize();
         }
         Err(e) => {
             log::error!("generation failed (site={}): {}", trigger.site, e);
@@ -138,9 +140,30 @@ fn open_config_file() -> anyhow::Result<()> {
 
     #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
     {
-        Err(anyhow::anyhow!(
-            "Open config is not supported on this platform"
-        ))
+        Command::new("xdg-open")
+            .arg(path)
+            .spawn()
+            .map(|_| ())
+            .map_err(Into::into)
+    }
+}
+
+fn read_master_key(config: &Config) -> Option<Zeroizing<String>> {
+    config
+        .default
+        .master_key
+        .as_deref()
+        .filter(|k| !k.is_empty())
+        .map(|k| Zeroizing::new(k.to_string()))
+}
+
+fn warn_legacy_algorithm(config: &Config) {
+    if config.default.algorithm == AlgorithmVersion::V1 {
+        log::warn!(
+            "using legacy algorithm v1, which only uses 128 bits of entropy (passwords of \
+             length >= 16 are weakened). Set `algorithm = \"v2\"` under [default] for new \
+             passwords; keep `algorithm = \"v1\"` in [sites.<name>] for existing accounts."
+        );
     }
 }
 
@@ -164,15 +187,10 @@ fn worker_loop(
         log::error!("failed to apply autostart setting: {}", e);
     }
 
-    let mut master_key = config
-        .default
-        .master_key
-        .as_deref()
-        .filter(|k| !k.is_empty())
-        .map(str::to_string);
+    let mut master_key = read_master_key(&config);
+    warn_legacy_algorithm(&config);
 
-    // AtomicBool is a thread-safe boolean
-    // Pre
+    // Shared flag telling the listener to ignore our own synthetic keystrokes.
     let injection_active = Arc::new(AtomicBool::new(false));
 
     let triggers = vec![
@@ -186,7 +204,12 @@ fn worker_loop(
         ),
     ];
 
-    if let Err(e) = start_keyboard_listener(trigger_tx, triggers, injection_active.clone()) {
+    if let Err(e) = start_keyboard_listener(
+        trigger_tx,
+        triggers,
+        config.default.terminators.clone(),
+        injection_active.clone(),
+    ) {
         log::error!("failed to start keyboard listener: {}", e);
         return;
     }
@@ -204,7 +227,7 @@ fn worker_loop(
             recv(trigger_rx) -> msg => {
                 match msg {
                     Ok(trigger) => {
-                        handle_trigger(&config, master_key.as_deref(), &mut injector, trigger);
+                        handle_trigger(&config, master_key.as_ref().map(|k| k.as_str()), &mut injector, trigger);
                     }
                     Err(e) => {
                         log::error!("trigger channel closed: {}", e);
@@ -219,12 +242,8 @@ fn worker_loop(
                         match Config::load() {
                             Ok(c) => {
                                 config = c;
-                                master_key = config
-                                    .default
-                                    .master_key
-                                    .as_deref()
-                                    .filter(|k| !k.is_empty())
-                                    .map(str::to_string);
+                                master_key = read_master_key(&config);
+                                warn_legacy_algorithm(&config);
 
                                 let requested_autostart = config.default.autostart;
                                 match autostart::set_enabled(requested_autostart) {
