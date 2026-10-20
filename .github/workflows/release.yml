@@ -42,7 +42,8 @@ jobs:
           mkdir -p dist
           find target -path '*/bundle/dmg/*.dmg' -exec cp {} dist/ \;
           find target -path '*/bundle/nsis/*.exe' -exec cp {} dist/ \;
-          (cd dist && for f in *; do shasum -a 256 "$f" > "$f.sha256"; done)
+          if command -v sha256sum >/dev/null; then SUM="sha256sum"; else SUM="shasum -a 256"; fi
+          (cd dist && for f in *; do $SUM "$f" > "$f.sha256"; done)
           ls -la dist
       - uses: actions/upload-artifact@v4
         with:
