@@ -18,8 +18,22 @@ pub struct TrayItems {
 
 fn open_label(shortcut: &str) -> String {
     let pretty = shortcut
-        .replace("CommandOrControl", if cfg!(target_os = "macos") { "⌘" } else { "Ctrl" })
-        .replace("CmdOrCtrl", if cfg!(target_os = "macos") { "⌘" } else { "Ctrl" });
+        .replace(
+            "CommandOrControl",
+            if cfg!(target_os = "macos") {
+                "⌘"
+            } else {
+                "Ctrl"
+            },
+        )
+        .replace(
+            "CmdOrCtrl",
+            if cfg!(target_os = "macos") {
+                "⌘"
+            } else {
+                "Ctrl"
+            },
+        );
     format!("生成密码…    {pretty}")
 }
 
@@ -29,8 +43,14 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
 
     let open = MenuItem::with_id(app, "open", open_label(&shortcut), true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "设置…", true, None::<&str>)?;
-    let autostart =
-        CheckMenuItem::with_id(app, "autostart", "开机自动启动", true, autostart_enabled, None::<&str>)?;
+    let autostart = CheckMenuItem::with_id(
+        app,
+        "autostart",
+        "开机自动启动",
+        true,
+        autostart_enabled,
+        None::<&str>,
+    )?;
     let quit = MenuItem::with_id(app, "quit", "退出 EasyPassword", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
@@ -86,7 +106,11 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
 /// Returns the resulting state.
 pub fn set_autostart(app: &AppHandle, enabled: bool) -> Result<bool, String> {
     let launcher = app.autolaunch();
-    let result = if enabled { launcher.enable() } else { launcher.disable() };
+    let result = if enabled {
+        launcher.enable()
+    } else {
+        launcher.disable()
+    };
     let actual = launcher.is_enabled().unwrap_or(false);
     if let Some(items) = app.try_state::<TrayItems>() {
         let _ = items.autostart.set_checked(actual);

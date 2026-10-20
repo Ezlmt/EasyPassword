@@ -108,8 +108,8 @@ pub fn submit(
     alternate: bool,
 ) -> Result<SubmitResult, String> {
     let seed = state.seed()?.ok_or("尚未设置主密钥")?;
-    let password = generate(&seed, &params.site, params.counter, &params.rules)
-        .map_err(|e| e.to_string())?;
+    let password =
+        generate(&seed, &params.site, params.counter, &params.rules).map_err(|e| e.to_string())?;
 
     let (mode, clear_secs) = {
         let mut settings = lock(&state.settings);
@@ -193,7 +193,10 @@ pub struct SettingsView {
 }
 
 #[tauri::command]
-pub async fn get_settings(app: AppHandle, state: State<'_, AppState>) -> Result<SettingsView, String> {
+pub async fn get_settings(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<SettingsView, String> {
     let seed = state.seed()?;
     Ok(SettingsView {
         settings: lock(&state.settings).clone(),
@@ -210,7 +213,10 @@ pub fn save_settings(
     state: State<'_, AppState>,
     mut settings: Settings,
 ) -> Result<(), String> {
-    settings.defaults.validate().map_err(|e| format!("默认规则无效: {e}"))?;
+    settings
+        .defaults
+        .validate()
+        .map_err(|e| format!("默认规则无效: {e}"))?;
     settings.shortcut = settings.shortcut.trim().to_string();
 
     let old_shortcut = lock(&state.settings).shortcut.clone();

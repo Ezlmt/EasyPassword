@@ -21,7 +21,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Format
         if: runner.os == 'Linux'
-        continue-on-error: true
         run: cargo fmt --all && git diff --exit-code
       - name: Clippy
         run: cargo clippy -p easypassword-core --all-targets -- -D warnings

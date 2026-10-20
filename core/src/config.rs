@@ -165,7 +165,10 @@ impl Settings {
     pub fn set_params(&mut self, params: &SiteParams, now: u64) {
         let d = &self.defaults;
         let r = &params.rules;
-        let last_used = self.sites.get(&params.site).map_or(now, |e| e.last_used.max(now));
+        let last_used = self
+            .sites
+            .get(&params.site)
+            .map_or(now, |e| e.last_used.max(now));
         let entry = SiteEntry {
             counter: params.counter.max(1),
             length: (r.length != d.length).then_some(r.length),
@@ -188,7 +191,13 @@ impl Settings {
         match self.sites.get_mut(&site) {
             Some(entry) => entry.last_used = now,
             None if self.remember_sites => {
-                self.sites.insert(site, SiteEntry { last_used: now, ..SiteEntry::default() });
+                self.sites.insert(
+                    site,
+                    SiteEntry {
+                        last_used: now,
+                        ..SiteEntry::default()
+                    },
+                );
             }
             None => return false,
         }
@@ -219,7 +228,10 @@ impl Settings {
             })
             .collect();
         hits.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)).then(a.2.cmp(b.2)));
-        hits.into_iter().take(limit).map(|(_, _, s)| s.clone()).collect()
+        hits.into_iter()
+            .take(limit)
+            .map(|(_, _, s)| s.clone())
+            .collect()
     }
 }
 
@@ -285,7 +297,10 @@ mod tests {
         s.touch("gitlab.com", 3);
         s.touch("mygit.io", 9);
         s.touch("bank.com", 2);
-        assert_eq!(s.suggestions("git", 10), vec!["gitlab.com", "github.com", "mygit.io"]);
+        assert_eq!(
+            s.suggestions("git", 10),
+            vec!["gitlab.com", "github.com", "mygit.io"]
+        );
         assert_eq!(s.suggestions("", 2), vec!["mygit.io", "gitlab.com"]);
         assert!(s.suggestions("zzz", 10).is_empty());
 

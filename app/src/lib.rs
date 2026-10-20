@@ -66,7 +66,10 @@ pub fn run() {
             let config_dir = app.path().app_config_dir()?;
             let settings_path = config_dir.join("settings.toml");
             let settings = Settings::load(&settings_path).unwrap_or_else(|e| {
-                log::error!("failed to load {}: {e}; using defaults", settings_path.display());
+                log::error!(
+                    "failed to load {}: {e}; using defaults",
+                    settings_path.display()
+                );
                 Settings::default()
             });
             let first_run = !settings_path.exists();

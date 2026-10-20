@@ -198,9 +198,7 @@ pub fn generate(
     info.push(0);
     info.extend_from_slice(&counter.to_le_bytes());
     info.extend_from_slice(&(rules.length as u32).to_le_bytes());
-    info.push(
-        (rules.lowercase as u8) | (rules.uppercase as u8) << 1 | (rules.digits as u8) << 2,
-    );
+    info.push((rules.lowercase as u8) | (rules.uppercase as u8) << 1 | (rules.digits as u8) << 2);
     info.extend_from_slice(symbols.as_bytes());
 
     // Each output char consumes < 7 + log2(length) bits; 2 bytes per char plus
@@ -303,25 +301,53 @@ mod tests {
         let base = generate(&s, "github.com", 1, &r).unwrap();
         assert_ne!(*base, *generate(&s, "gitlab.com", 1, &r).unwrap());
         assert_ne!(*base, *generate(&s, "github.com", 2, &r).unwrap());
-        assert_ne!(*base, *generate(&test_seed(8), "github.com", 1, &r).unwrap());
-        let longer = generate(&s, "github.com", 1, &Rules { length: 21, ..r.clone() }).unwrap();
+        assert_ne!(
+            *base,
+            *generate(&test_seed(8), "github.com", 1, &r).unwrap()
+        );
+        let longer = generate(
+            &s,
+            "github.com",
+            1,
+            &Rules {
+                length: 21,
+                ..r.clone()
+            },
+        )
+        .unwrap();
         assert!(!longer.starts_with(base.as_str()) && !longer.contains(&base[..10]));
-        let nosym = Rules { symbols: String::new(), ..r.clone() };
+        let nosym = Rules {
+            symbols: String::new(),
+            ..r.clone()
+        };
         assert_ne!(*base, *generate(&s, "github.com", 1, &nosym).unwrap());
     }
 
     #[test]
     fn symbol_order_does_not_matter() {
         let s = test_seed(3);
-        let a = Rules { symbols: "!@#".into(), ..Rules::default() };
-        let b = Rules { symbols: "#!@@".into(), ..Rules::default() };
-        assert_eq!(*generate(&s, "x.com", 1, &a).unwrap(), *generate(&s, "x.com", 1, &b).unwrap());
+        let a = Rules {
+            symbols: "!@#".into(),
+            ..Rules::default()
+        };
+        let b = Rules {
+            symbols: "#!@@".into(),
+            ..Rules::default()
+        };
+        assert_eq!(
+            *generate(&s, "x.com", 1, &a).unwrap(),
+            *generate(&s, "x.com", 1, &b).unwrap()
+        );
     }
 
     #[test]
     fn every_class_present_and_alphabet_respected() {
         let s = test_seed(9);
-        let rules = Rules { length: 8, symbols: "!@".into(), ..Rules::default() };
+        let rules = Rules {
+            length: 8,
+            symbols: "!@".into(),
+            ..Rules::default()
+        };
         for i in 0..200 {
             let pw = generate(&s, &format!("site{i}.com"), 1, &rules).unwrap();
             assert_eq!(pw.chars().count(), 8);
@@ -329,14 +355,25 @@ mod tests {
             assert!(pw.chars().any(|c| c.is_ascii_uppercase()));
             assert!(pw.chars().any(|c| c.is_ascii_digit()));
             assert!(pw.chars().any(|c| c == '!' || c == '@'));
-            assert!(pw.chars().all(|c| c.is_ascii_alphanumeric() || c == '!' || c == '@'));
+            assert!(pw
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '!' || c == '@'));
         }
     }
 
     #[test]
     fn long_passwords_are_not_degenerate() {
         let s = test_seed(5);
-        let pw = generate(&s, "x.com", 1, &Rules { length: MAX_LENGTH, ..Rules::default() }).unwrap();
+        let pw = generate(
+            &s,
+            "x.com",
+            1,
+            &Rules {
+                length: MAX_LENGTH,
+                ..Rules::default()
+            },
+        )
+        .unwrap();
         assert_eq!(pw.chars().count(), MAX_LENGTH);
         let tail: Vec<char> = pw.chars().rev().take(16).collect();
         assert!(tail.windows(2).any(|w| w[0] != w[1]), "{}", pw.as_str());
@@ -367,18 +404,77 @@ mod tests {
     #[test]
     fn rejects_bad_rules() {
         let s = test_seed(1);
-        let none = Rules { lowercase: false, uppercase: false, digits: false, symbols: String::new(), length: 10 };
-        assert!(matches!(generate(&s, "x", 1, &none), Err(Error::NoCharacterClasses)));
-        assert!(matches!(generate(&s, "x", 1, &Rules { length: 3, ..Rules::default() }), Err(Error::InvalidLength(3))));
-        assert!(matches!(generate(&s, "x", 1, &Rules { length: 129, ..Rules::default() }), Err(Error::InvalidLength(129))));
-        assert!(matches!(generate(&s, "x", 1, &Rules { symbols: "a!".into(), ..Rules::default() }), Err(Error::InvalidSymbol('a'))));
-        assert!(matches!(generate(&s, "x", 1, &Rules { symbols: "! ".into(), ..Rules::default() }), Err(Error::InvalidSymbol(' '))));
-        assert!(matches!(generate(&s, "  ", 1, &Rules::default()), Err(Error::EmptySite)));
+        let none = Rules {
+            lowercase: false,
+            uppercase: false,
+            digits: false,
+            symbols: String::new(),
+            length: 10,
+        };
+        assert!(matches!(
+            generate(&s, "x", 1, &none),
+            Err(Error::NoCharacterClasses)
+        ));
+        assert!(matches!(
+            generate(
+                &s,
+                "x",
+                1,
+                &Rules {
+                    length: 3,
+                    ..Rules::default()
+                }
+            ),
+            Err(Error::InvalidLength(3))
+        ));
+        assert!(matches!(
+            generate(
+                &s,
+                "x",
+                1,
+                &Rules {
+                    length: 129,
+                    ..Rules::default()
+                }
+            ),
+            Err(Error::InvalidLength(129))
+        ));
+        assert!(matches!(
+            generate(
+                &s,
+                "x",
+                1,
+                &Rules {
+                    symbols: "a!".into(),
+                    ..Rules::default()
+                }
+            ),
+            Err(Error::InvalidSymbol('a'))
+        ));
+        assert!(matches!(
+            generate(
+                &s,
+                "x",
+                1,
+                &Rules {
+                    symbols: "! ".into(),
+                    ..Rules::default()
+                }
+            ),
+            Err(Error::InvalidSymbol(' '))
+        ));
+        assert!(matches!(
+            generate(&s, "  ", 1, &Rules::default()),
+            Err(Error::EmptySite)
+        ));
     }
 
     #[test]
     fn seed_derivation() {
-        assert!(matches!(MasterSeed::derive("", ""), Err(Error::EmptyMasterKey)));
+        assert!(matches!(
+            MasterSeed::derive("", ""),
+            Err(Error::EmptyMasterKey)
+        ));
         // identity is trimmed / case-insensitive, master key is not
         let a = MasterSeed::derive("k", " Me@Example.com ").unwrap();
         let b = MasterSeed::derive("k", "me@example.com").unwrap();
@@ -411,7 +507,11 @@ mod tests {
         let s = seed();
         for (site, counter, length, symbols, expected_fp, expected) in GOLDEN {
             assert_eq!(s.fingerprint(), *expected_fp);
-            let rules = Rules { length: *length, symbols: (*symbols).to_string(), ..Rules::default() };
+            let rules = Rules {
+                length: *length,
+                symbols: (*symbols).to_string(),
+                ..Rules::default()
+            };
             let pw = generate(s, site, *counter, &rules).unwrap();
             assert_eq!(pw.as_str(), *expected, "{site} {counter} {length}");
         }
