@@ -1,0 +1,70 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "EasyPassword",
+  "version": "2.0.0",
+  "identifier": "com.ezlmt.easypassword",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "popup",
+        "title": "EasyPassword",
+        "url": "popup.html",
+        "width": 440,
+        "height": 330,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "center": true,
+        "focus": true,
+        "shadow": true
+      },
+      {
+        "label": "settings",
+        "title": "EasyPassword 设置",
+        "url": "settings.html",
+        "width": 680,
+        "height": 640,
+        "minWidth": 560,
+        "minHeight": 480,
+        "visible": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg", "nsis"],
+    "category": "Utility",
+    "shortDescription": "Deterministic password generator",
+    "longDescription": "Press a global shortcut, type a site name, and EasyPassword types a strong, reproducible password derived from your master key. Nothing is stored or synced.",
+    "copyright": "MIT License",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "signingIdentity": "-"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["SimpChinese", "English"]
+      }
+    }
+  }
+}

@@ -1,11 +1,5 @@
 /target
-
-# macOS
+/dist
+/app/gen
 .DS_Store
-
-# Local build/output
-/dist/
-
-# Local experiments
-/test_kb/
-test_keyboard.rs
+__pycache__/
