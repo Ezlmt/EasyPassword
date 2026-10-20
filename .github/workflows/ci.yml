@@ -22,7 +22,7 @@ jobs:
       - name: Format
         if: runner.os == 'Linux'
         continue-on-error: true
-        run: cargo fmt --all -- --check
+        run: cargo fmt --all && git diff --exit-code
       - name: Clippy
         run: cargo clippy -p easypassword-core --all-targets -- -D warnings
       - name: Test

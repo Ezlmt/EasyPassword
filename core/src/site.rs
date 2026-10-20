@@ -19,8 +19,12 @@ pub fn normalize_site(input: &str) -> String {
         if let Some(at) = host.rfind('@') {
             host = &host[at + 1..];
         }
-        // Drop a port, but leave IPv6 literals like [::1] intact.
-        if !host.starts_with('[') {
+        // Drop a port; IPv6 literals look like [::1]:8443.
+        if host.starts_with('[') {
+            if let Some(end) = host.find(']') {
+                host = &host[..=end];
+            }
+        } else {
             if let Some(colon) = host.rfind(':') {
                 if host[colon + 1..].chars().all(|c| c.is_ascii_digit()) {
                     host = &host[..colon];
