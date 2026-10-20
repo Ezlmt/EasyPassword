@@ -15,6 +15,8 @@ use crate::state::AppState;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
     Type,
+    /// Chosen automatically on macOS when a CJK input method is active.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     Paste,
     Copy,
 }

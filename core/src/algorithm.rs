@@ -401,13 +401,14 @@ mod tests {
         assert!(MasterSeed::from_bytes(&[0; 31]).is_err());
     }
 
+    include!("../tests/golden.inc");
+
     /// Golden vectors from the independent Python reference
     /// (`scripts/reference.py`). They pin the algorithm: if they change,
     /// every user's passwords change.
     #[test]
     fn golden_vectors() {
         let s = seed();
-        include!("../tests/golden.inc");
         for (site, counter, length, symbols, expected_fp, expected) in GOLDEN {
             assert_eq!(s.fingerprint(), *expected_fp);
             let rules = Rules { length: *length, symbols: (*symbols).to_string(), ..Rules::default() };
