@@ -1,6 +1,0 @@
-<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
-  <!-- Tray-optimized mark: bold, high-contrast, readable at 16/20/32px -->
-  <rect x="24" y="24" width="208" height="208" rx="56" fill="#151515"/>
-  <rect x="84" y="72" width="36" height="112" rx="18" fill="#00E676"/>
-  <rect x="136" y="72" width="36" height="112" rx="18" fill="#00E676"/>
-</svg>

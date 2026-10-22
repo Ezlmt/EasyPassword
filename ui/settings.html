@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>EasyPassword 设置</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body { padding: 20px 24px 80px; user-select: text; -webkit-user-select: text; }
+    h2 { font-size: 15px; margin: 22px 0 10px; }
+    h2:first-child { margin-top: 0; }
+    section { padding: 14px 16px; background: var(--bg-soft); border-radius: var(--radius); display: grid; gap: 10px; }
+    section input[type="text"], section input[type="password"], section input[type="number"] { background: var(--bg); }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 500; }
+    td input[type="number"] { width: 64px; padding: 3px 6px; }
+    td input[type="text"] { padding: 3px 6px; }
+    .bar { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 24px; background: var(--bg); border-top: 1px solid var(--border); display: flex; gap: 10px; align-items: center; }
+    #change-form { display: grid; gap: 8px; }
+  </style>
+</head>
+<body>
+  <h2>主密钥</h2>
+  <section>
+    <div class="row">
+      <span class="grow" id="key-state"></span>
+      <button id="change-key">更换主密钥</button>
+      <button class="danger" id="forget-key">从本机移除</button>
+    </div>
+    <div id="change-form" class="hidden">
+      <div class="msg warn">更换主密钥（或身份）后，<b>所有站点的密码都会改变</b>。请先在各网站上改成新密码，或确认你是在新设备上恢复同一个主密钥。</div>
+      <input id="mk1" type="password" placeholder="主密钥" autocomplete="off">
+      <input id="mk2" type="password" placeholder="再输入一次" autocomplete="off">
+      <input id="identity" type="text" placeholder="身份（可选，如邮箱；每台设备须一致）" autocomplete="off">
+      <div class="row"><span class="grow small muted" id="change-hint"></span><button class="primary" id="change-save">保存主密钥</button></div>
+    </div>
+  </section>
+
+  <h2>旧版拼接密码</h2>
+  <section>
+    <div class="small muted">旧版 EasyPassword 的 <code>!!站点</code> 密码 = 拼接前缀 + 站点名（原样）。前缀就是旧 config.toml 里的 <code>master_key</code>，保存在系统钥匙串中。</div>
+    <div class="row">
+      <span class="grow" id="prefix-state"></span>
+      <button class="danger" id="forget-prefix">移除</button>
+    </div>
+    <div class="row">
+      <input id="prefix" type="password" class="grow" placeholder="设置/更换拼接前缀" autocomplete="off">
+      <button id="save-prefix">保存前缀</button>
+    </div>
+    <div>
+      <div class="muted small" style="margin-bottom:4px">新站点默认使用</div>
+      <div class="checks">
+        <label><input type="radio" name="default-mode" value="concat">拼接（旧密码）</label>
+        <label><input type="radio" name="default-mode" value="derived">新算法（推荐）</label>
+      </div>
+      <div class="small muted" style="margin-top:4px">已经用过的站点会一直保持它当时的方式，修改这里不会改变已有密码。弹窗中输入 <code>!!站点</code> 可强制使用拼接。</div>
+    </div>
+  </section>
+
+  <h2>使用</h2>
+  <section>
+    <label>全局快捷键
+      <div class="row">
+        <input id="shortcut" type="text" class="grow" spellcheck="false">
+        <button id="record">录制</button>
+      </div>
+    </label>
+    <div>
+      <div class="muted small" style="margin-bottom:4px">按 Enter 时</div>
+      <div class="checks">
+        <label><input type="radio" name="output" value="type">输入到原窗口（<span class="mod">Ctrl</span>+Enter 复制）</label>
+        <label><input type="radio" name="output" value="copy">复制到剪贴板（<span class="mod">Ctrl</span>+Enter 输入）</label>
+      </div>
+    </div>
+    <label>剪贴板自动清除（秒，0 = 不清除） <input id="clear-secs" type="number" min="0" max="600"></label>
+    <div class="checks"><label><input type="checkbox" id="autostart">开机自动启动</label></div>
+    <div id="perm" class="msg warn hidden">
+      macOS 需要「辅助功能」权限才能把密码输入到其他窗口：系统设置 → 隐私与安全性 → 辅助功能 → 允许 EasyPassword。未授权时会自动改为复制。
+    </div>
+  </section>
+
+  <h2>默认密码规则</h2>
+  <section>
+    <div class="two">
+      <label>长度 <input id="d-length" type="number" min="4" max="128"></label>
+      <label>符号（留空 = 不用符号） <input id="d-symbols" type="text" spellcheck="false"></label>
+    </div>
+    <div class="checks">
+      <label><input type="checkbox" id="d-lower">小写字母</label>
+      <label><input type="checkbox" id="d-upper">大写字母</label>
+      <label><input type="checkbox" id="d-digits">数字</label>
+    </div>
+    <div class="small muted">修改默认规则会改变所有未单独设置过的站点的密码。</div>
+  </section>
+
+  <h2>站点</h2>
+  <section>
+    <div class="row">
+      <label class="checks grow"><span><input type="checkbox" id="remember">记住用过的站点名（用于自动补全，不含密码）</span></label>
+      <button id="forget-history">清除历史</button>
+    </div>
+    <table>
+      <thead><tr><th>站点</th><th>方式</th><th>版本</th><th>长度</th><th>用户名</th><th>最后使用</th><th></th></tr></thead>
+      <tbody id="sites"></tbody>
+    </table>
+    <div class="small muted">“版本”在需要更换某个站点的密码时 +1。只有自定义过的设置会被保存。</div>
+  </section>
+
+  <div class="bar">
+    <div id="message" class="msg hidden grow"></div>
+    <span class="grow"></span>
+    <button class="primary" id="save">保存</button>
+  </div>
+
+  <script src="settings.js"></script>
+</body>
+</html>

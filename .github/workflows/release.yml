@@ -2,127 +2,64 @@ name: release
 
 on:
   push:
-    tags:
-      - "v*"
+    tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   build:
-    name: build (${{ matrix.name }})
+    name: bundle (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
+          - name: macos-universal
+            os: macos-latest
+            args: --target universal-apple-darwin
+            targets: aarch64-apple-darwin,x86_64-apple-darwin
           - name: windows-x64
             os: windows-latest
-            target: x86_64-pc-windows-msvc
-            artifact: easypassword.exe
-
-          - name: macos-arm64
-            os: macos-latest
-            target: aarch64-apple-darwin
-            artifact: dist/EasyPassword.app
-
-          - name: linux-x64
-            os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            artifact: easypassword
-
+            args: ""
+            targets: ""
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install Linux system deps
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            pkg-config \
-            libgtk-3-dev \
-            libx11-dev \
-            libxtst-dev \
-            libxdo-dev \
-            libxrandr-dev \
-            libxinerama-dev \
-            libxcursor-dev \
-            libxi-dev \
-            libxkbcommon-dev \
-            libglib2.0-dev \
-            libdbus-1-dev
-
-      - name: Build release
-        if: runner.os != 'macOS'
-        run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Build macOS app bundle
-        if: runner.os == 'macOS'
-        run: bash scripts/macos-bundle.sh
-
-      - name: Package artifact (Windows)
-        if: runner.os == 'Windows'
+          targets: ${{ matrix.targets }}
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Bundle
+        working-directory: app
+        run: npx --yes @tauri-apps/cli@^2 build ${{ matrix.args }}
+      - name: Collect artifacts
         shell: bash
         run: |
-          set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
-          NAME="easypassword-${VERSION}-${{ matrix.name }}"
           mkdir -p dist
-          cp -f "target/${{ matrix.target }}/release/easypassword.exe" "dist/easypassword.exe"
-          (cd dist && 7z a -tzip "${NAME}.zip" easypassword.exe)
-          (cd dist && sha256sum "${NAME}.zip" > "${NAME}.zip.sha256")
-
-      - name: Package artifact (Linux)
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
-          NAME="easypassword-${VERSION}-${{ matrix.name }}"
-          mkdir -p dist
-          cp -f "target/${{ matrix.target }}/release/easypassword" "dist/easypassword"
-          chmod +x dist/easypassword
-          (cd dist && tar -czf "${NAME}.tar.gz" easypassword)
-          (cd dist && sha256sum "${NAME}.tar.gz" > "${NAME}.tar.gz.sha256")
-
-      - name: Package artifact (macOS)
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
-          NAME="easypassword-${VERSION}-${{ matrix.name }}"
-          (cd dist && ditto -c -k --sequesterRsrc --keepParent "EasyPassword.app" "${NAME}.zip")
-          (cd dist && shasum -a 256 "${NAME}.zip" > "${NAME}.zip.sha256")
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+          find target -path '*/bundle/dmg/*.dmg' -exec cp {} dist/ \;
+          find target -path '*/bundle/nsis/*.exe' -exec cp {} dist/ \;
+          if command -v sha256sum >/dev/null; then SUM="sha256sum"; else SUM="shasum -a 256"; fi
+          (cd dist && for f in *; do $SUM "$f" > "$f.sha256"; done)
+          ls -la dist
+      - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
           path: dist/*
 
   release:
-    name: create release
-    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
     needs: build
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
-          files: |
-            dist/*
+          files: dist/*
           generate_release_notes: true

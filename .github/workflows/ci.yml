@@ -1,0 +1,57 @@
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  core:
+    name: core tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Format
+        if: runner.os == 'Linux'
+        run: cargo fmt --all && git diff --exit-code
+      - name: Clippy
+        run: cargo clippy -p easypassword-core --all-targets -- -D warnings
+      - name: Test
+        run: cargo test -p easypassword-core
+
+  reference:
+    name: python reference matches golden vectors
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install argon2-cffi
+      - run: python3 scripts/reference.py | diff - core/tests/golden.inc
+
+  app:
+    name: app build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Clippy
+        run: cargo clippy -p easypassword --all-targets -- -D warnings
+      - name: Build
+        run: cargo build -p easypassword
