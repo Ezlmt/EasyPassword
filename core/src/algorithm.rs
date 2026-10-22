@@ -297,9 +297,18 @@ mod tests {
     #[test]
     fn concat_matches_legacy_behaviour() {
         // Same expectations as the 0.x test-suite.
-        assert_eq!(concat("master", "github.com").unwrap().as_str(), "mastergithub.com");
-        assert_eq!(concat("master", "GitHub.com").unwrap().as_str(), "masterGitHub.com");
-        assert_eq!(concat("master!", "github.com").unwrap().as_str(), "master!github.com");
+        assert_eq!(
+            concat("master", "github.com").unwrap().as_str(),
+            "mastergithub.com"
+        );
+        assert_eq!(
+            concat("master", "GitHub.com").unwrap().as_str(),
+            "masterGitHub.com"
+        );
+        assert_eq!(
+            concat("master!", "github.com").unwrap().as_str(),
+            "master!github.com"
+        );
         assert_eq!(concat("m ", " www.x.com ").unwrap().as_str(), "m www.x.com");
         assert!(matches!(concat("", "x"), Err(Error::EmptyConcatPrefix)));
         assert!(matches!(concat("m", "  "), Err(Error::EmptySite)));
