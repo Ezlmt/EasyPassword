@@ -21,6 +21,9 @@
     footer .spacer { flex: 1; }
     #setup p { margin: 0 0 6px; }
     #setup .grid { display: grid; gap: 8px; }
+    #advanced.concat .rule { opacity: .4; pointer-events: none; }
+    .tag { display: inline-block; padding: 0 6px; border-radius: 4px; background: var(--bg-soft); border: 1px solid var(--border); }
+    .tag.concat { color: var(--warn-fg); background: var(--warn-bg); border-color: transparent; }
   </style>
 </head>
 <body>
@@ -37,7 +40,7 @@
   <!-- Main view -->
   <section id="main" class="hidden">
     <div class="field">
-      <input id="site" type="text" placeholder="站点，例如 github.com" autocomplete="off" spellcheck="false" autocapitalize="off">
+      <input id="site" type="text" placeholder="站点，例如 github.com（!! 开头 = 拼接）" autocomplete="off" spellcheck="false" autocapitalize="off">
       <ul id="suggestions" class="hidden"></ul>
     </div>
     <div class="row small muted" style="margin-top:6px">
@@ -45,14 +48,18 @@
       <button class="link small" id="toggle-advanced">选项 ▾</button>
     </div>
     <div id="advanced" class="hidden" style="margin-top:6px">
-      <label>长度 <input id="adv-length" type="number" min="4" max="128"></label>
-      <label>版本号 <input id="adv-counter" type="number" min="1" title="密码泄露或需要更换时 +1"></label>
       <div class="checks full">
+        <label><input type="radio" name="mode" value="concat">拼接（旧密码）</label>
+        <label><input type="radio" name="mode" value="derived">新算法（推荐）</label>
+      </div>
+      <label class="rule">长度 <input id="adv-length" type="number" min="4" max="128"></label>
+      <label class="rule">版本号 <input id="adv-counter" type="number" min="1" title="密码泄露或需要更换时 +1"></label>
+      <div class="checks full rule">
         <label><input type="checkbox" id="adv-lower">小写</label>
         <label><input type="checkbox" id="adv-upper">大写</label>
         <label><input type="checkbox" id="adv-digits">数字</label>
       </div>
-      <label class="full">符号（留空 = 不用符号） <input id="adv-symbols" type="text" spellcheck="false"></label>
+      <label class="full rule">符号（留空 = 不用符号） <input id="adv-symbols" type="text" spellcheck="false"></label>
       <label class="full">用户名（仅备注） <input id="adv-username" type="text" spellcheck="false"></label>
     </div>
   </section>
@@ -64,6 +71,8 @@
       <input id="mk1" type="password" placeholder="主密钥（建议 4 个以上单词或 12 位以上）" autocomplete="off">
       <input id="mk2" type="password" placeholder="再输入一次" autocomplete="off">
       <input id="identity" type="text" placeholder="身份（可选，如邮箱；每台设备须一致）" autocomplete="off" spellcheck="false">
+      <input id="concat-prefix" type="password" placeholder="旧版拼接前缀（可选）" autocomplete="off" title="旧版 EasyPassword 配置文件 config.toml 里的 master_key。填写后，新站点默认按「前缀 + 站点名」生成，与旧版 !! 完全一致。">
+      <div class="small muted">用过旧版 <code>!!站点</code> 拼接密码？把旧 config.toml 里的 <code>master_key</code> 填进上面一栏即可继续使用。</div>
       <div class="row">
         <span id="setup-hint" class="small muted grow"></span>
         <button class="primary" id="setup-save">保存</button>

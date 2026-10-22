@@ -57,6 +57,12 @@ async function load() {
   $("forget-key").disabled = !view.has_seed;
   $("identity").value = s.identity;
 
+  $("prefix-state").innerHTML = view.has_concat_prefix
+    ? "已设置"
+    : `<span class="muted">未设置</span>`;
+  $("forget-prefix").disabled = !view.has_concat_prefix;
+  document.querySelectorAll('input[name="default-mode"]').forEach((r) => (r.checked = r.value === s.default_mode));
+
   $("shortcut").value = s.shortcut;
   document.querySelectorAll('input[name="output"]').forEach((r) => (r.checked = r.value === s.output));
   $("clear-secs").value = s.clipboard_clear_seconds;
@@ -86,14 +92,16 @@ function renderSites() {
   tbody.innerHTML = "";
   const entries = Object.entries(view.settings.sites).sort((a, b) => b[1].last_used - a[1].last_used);
   if (entries.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="muted">还没有站点</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="muted">还没有站点</td></tr>`;
     return;
   }
   for (const [site, e] of entries) {
     const tr = document.createElement("tr");
     const when = e.last_used ? new Date(e.last_used * 1000).toLocaleDateString() : "";
+    const mode = e.mode || view.settings.default_mode;
     tr.innerHTML = `
-      <td>${escapeHtml(site)}</td>
+      <td>${escapeHtml(e.literal || site)}</td>
+      <td>${mode === "concat" ? "拼接" : "新算法"}</td>
       <td><input type="number" min="1" value="${e.counter}" data-k="counter"></td>
       <td><input type="number" min="4" max="128" value="${e.length ?? ""}" placeholder="默认" data-k="length"></td>
       <td><input type="text" value="${escapeHtml(e.username || "")}" data-k="username"></td>
@@ -127,6 +135,7 @@ function collect() {
   s.output = document.querySelector('input[name="output"]:checked')?.value || "type";
   s.clipboard_clear_seconds = Math.max(0, parseInt($("clear-secs").value, 10) || 0);
   s.remember_sites = $("remember").checked;
+  s.default_mode = document.querySelector('input[name="default-mode"]:checked')?.value || "derived";
   s.defaults = {
     length: parseInt($("d-length").value, 10) || 20,
     lowercase: $("d-lower").checked,
@@ -172,6 +181,30 @@ $("forget-history").addEventListener("click", async () => {
     await invoke("forget_history");
     await load();
     msg("已清除");
+  } catch (e) {
+    err(e);
+  }
+});
+
+$("save-prefix").addEventListener("click", async () => {
+  const p = $("prefix").value;
+  if (!p) return msg("请输入拼接前缀", "error");
+  try {
+    await invoke("set_concat_prefix", { prefix: p });
+    $("prefix").value = "";
+    await load();
+    msg("拼接前缀已保存");
+  } catch (e) {
+    err(e);
+  }
+});
+
+$("forget-prefix").addEventListener("click", async () => {
+  if (!await ask("从本机钥匙串移除拼接前缀？之后拼接方式的站点将无法生成密码，直到重新设置。")) return;
+  try {
+    await invoke("forget_concat_prefix");
+    await load();
+    msg("已移除");
   } catch (e) {
     err(e);
   }

@@ -22,6 +22,17 @@ pub enum OutputMode {
     Copy,
 }
 
+/// How a site's password is produced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Mode {
+    /// Derived from the master seed (strong, recommended).
+    #[default]
+    Derived,
+    /// Legacy EasyPassword 0.x scheme: `concat_prefix + site` exactly as typed.
+    Concat,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -29,6 +40,9 @@ pub struct Settings {
     pub shortcut: String,
     /// What Enter does in the popup (the other action is on Ctrl/Cmd+Enter).
     pub output: OutputMode,
+    /// Mode for sites that have never been used. Once used, a site keeps the
+    /// mode it was used with, so changing this never alters existing passwords.
+    pub default_mode: Mode,
     pub clipboard_clear_seconds: u32,
     /// Remember site names (not passwords) for autocomplete.
     pub remember_sites: bool,
@@ -43,6 +57,7 @@ impl Default for Settings {
         Self {
             shortcut: "CommandOrControl+Alt+P".to_string(),
             output: OutputMode::Type,
+            default_mode: Mode::Derived,
             clipboard_clear_seconds: 20,
             remember_sites: true,
             identity: String::new(),
@@ -56,6 +71,13 @@ impl Default for Settings {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SiteEntry {
+    /// Pinned when the site is first used.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<Mode>,
+    /// For concat mode: the site text exactly as last typed, when it differs
+    /// from the normalized key (e.g. `GitHub.com` or `www.github.com`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub literal: Option<String>,
     pub counter: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub length: Option<usize>,
@@ -77,6 +99,8 @@ pub struct SiteEntry {
 impl Default for SiteEntry {
     fn default() -> Self {
         Self {
+            mode: None,
+            literal: None,
             counter: 1,
             length: None,
             lowercase: None,
@@ -98,13 +122,18 @@ impl SiteEntry {
             || self.digits.is_some()
             || self.symbols.is_some()
             || !self.username.is_empty()
+            || self.literal.is_some()
     }
 }
 
 /// Effective parameters for one site.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SiteParams {
+    /// Normalized key, e.g. `github.com`.
     pub site: String,
+    pub mode: Mode,
+    /// Text appended to the prefix in concat mode.
+    pub literal: String,
     pub counter: u32,
     pub rules: Rules,
     pub username: String,
@@ -147,6 +176,8 @@ impl Settings {
         let entry = self.sites.get(&site).cloned().unwrap_or_default();
         let d = &self.defaults;
         SiteParams {
+            mode: entry.mode.unwrap_or(self.default_mode),
+            literal: entry.literal.clone().unwrap_or_else(|| site.clone()),
             counter: entry.counter.max(1),
             rules: Rules {
                 length: entry.length.unwrap_or(d.length),
@@ -169,7 +200,11 @@ impl Settings {
             .sites
             .get(&params.site)
             .map_or(now, |e| e.last_used.max(now));
+        let literal = params.literal.trim();
         let entry = SiteEntry {
+            mode: Some(params.mode),
+            literal: (params.mode == Mode::Concat && !literal.is_empty() && literal != params.site)
+                .then(|| literal.to_string()),
             counter: params.counter.max(1),
             length: (r.length != d.length).then_some(r.length),
             lowercase: (r.lowercase != d.lowercase).then_some(r.lowercase),
@@ -180,6 +215,33 @@ impl Settings {
             last_used,
         };
         self.sites.insert(params.site.clone(), entry);
+    }
+
+    /// Records a successful use of `params` (pins the mode, stores overrides
+    /// and the typed literal, updates history). Returns whether it changed
+    /// anything that needs saving.
+    pub fn record_use(&mut self, params: &SiteParams, now: u64) -> bool {
+        let key = normalize_site(&params.site);
+        if key.is_empty() {
+            return false;
+        }
+        let params = SiteParams {
+            site: key.clone(),
+            ..params.clone()
+        };
+        let stored = self.params_for(&key);
+        let worth_storing = self.sites.contains_key(&key)
+            || self.remember_sites
+            || params.mode != self.default_mode
+            || params.counter != stored.counter
+            || params.rules != stored.rules
+            || params.username.trim() != stored.username
+            || (params.mode == Mode::Concat && params.literal.trim() != key);
+        if !worth_storing {
+            return false;
+        }
+        self.set_params(&params, now);
+        true
     }
 
     /// Records that `site` was used. Returns whether anything changed.
@@ -206,14 +268,17 @@ impl Settings {
 
     /// Removes sites that only exist as history (no overrides).
     pub fn forget_history(&mut self) {
-        self.sites.retain(|_, e| e.is_customized());
+        let default_mode = self.default_mode;
+        self.sites
+            .retain(|_, e| e.is_customized() || e.mode.is_some_and(|m| m != default_mode));
     }
 
     /// Autocomplete: prefix matches first, then substring matches, each group
-    /// most-recently-used first.
+    /// most-recently-used first. Returns what should be put in the input box:
+    /// the typed literal if one is stored (needed for concat mode), else the key.
     pub fn suggestions(&self, query: &str, limit: usize) -> Vec<String> {
         let q = query.trim().to_lowercase();
-        let mut hits: Vec<(u8, u64, &String)> = self
+        let mut hits: Vec<(u8, u64, &String, &SiteEntry)> = self
             .sites
             .iter()
             .filter_map(|(site, e)| {
@@ -224,13 +289,13 @@ impl Settings {
                 } else {
                     return None;
                 };
-                Some((rank, e.last_used, site))
+                Some((rank, e.last_used, site, e))
             })
             .collect();
         hits.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)).then(a.2.cmp(b.2)));
         hits.into_iter()
             .take(limit)
-            .map(|(_, _, s)| s.clone())
+            .map(|(_, _, s, e)| e.literal.clone().unwrap_or_else(|| s.clone()))
             .collect()
     }
 }
@@ -288,6 +353,75 @@ mod tests {
         // A later change of defaults still applies to non-overridden fields.
         s.defaults.uppercase = false;
         assert!(!s.params_for("bank.com").rules.uppercase);
+    }
+
+    #[test]
+    fn mode_is_pinned_on_first_use() {
+        let mut s = Settings {
+            default_mode: Mode::Concat,
+            ..Settings::default()
+        };
+        let p = s.params_for("old.com");
+        assert_eq!(p.mode, Mode::Concat);
+        assert!(s.record_use(&p, 1));
+
+        // Changing the default later must not change already-used sites.
+        s.default_mode = Mode::Derived;
+        assert_eq!(s.params_for("old.com").mode, Mode::Concat);
+        assert_eq!(s.params_for("new.com").mode, Mode::Derived);
+
+        // ...and forgetting history keeps it, because it differs from default.
+        s.forget_history();
+        assert!(s.sites.contains_key("old.com"));
+    }
+
+    #[test]
+    fn concat_literal_is_kept_as_typed() {
+        let mut s = Settings {
+            default_mode: Mode::Concat,
+            ..Settings::default()
+        };
+        let mut p = s.params_for("GitHub.com");
+        assert_eq!(p.site, "github.com");
+        assert_eq!(p.literal, "github.com");
+        p.literal = "GitHub.com".into();
+        s.record_use(&p, 1);
+        assert_eq!(s.sites["github.com"].literal.as_deref(), Some("GitHub.com"));
+        assert_eq!(s.params_for("github.com").literal, "GitHub.com");
+        // Autocomplete offers the literal so concat stays identical.
+        assert_eq!(s.suggestions("git", 5), vec!["GitHub.com"]);
+
+        // Typing the plain key later stores no literal.
+        let mut p = s.params_for("github.com");
+        p.literal = "github.com".into();
+        s.record_use(&p, 2);
+        assert_eq!(s.sites["github.com"].literal, None);
+    }
+
+    #[test]
+    fn derived_sites_do_not_store_literal() {
+        let mut s = Settings::default();
+        let mut p = s.params_for("https://www.github.com/login");
+        p.literal = "https://www.github.com/login".into();
+        s.record_use(&p, 1);
+        assert_eq!(s.sites["github.com"].literal, None);
+        assert_eq!(s.suggestions("git", 5), vec!["github.com"]);
+    }
+
+    #[test]
+    fn record_use_respects_remember_sites() {
+        let mut s = Settings {
+            remember_sites: false,
+            ..Settings::default()
+        };
+        let p = s.params_for("plain.com");
+        assert!(!s.record_use(&p, 1));
+        assert!(s.sites.is_empty());
+
+        let mut p = s.params_for("custom.com");
+        p.counter = 2;
+        assert!(s.record_use(&p, 1));
+        assert_eq!(s.sites["custom.com"].counter, 2);
     }
 
     #[test]

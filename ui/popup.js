@@ -3,6 +3,8 @@
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 
+const CONCAT_MARK = "!!";
+
 const $ = (id) => document.getElementById(id);
 const el = {
   message: $("message"), main: $("main"), setup: $("setup"), hints: $("hints"),
@@ -11,14 +13,14 @@ const el = {
   length: $("adv-length"), counter: $("adv-counter"), lower: $("adv-lower"),
   upper: $("adv-upper"), digits: $("adv-digits"), symbols: $("adv-symbols"),
   username: $("adv-username"), fingerprint: $("fingerprint"),
-  mk1: $("mk1"), mk2: $("mk2"), identity: $("identity"),
+  mk1: $("mk1"), mk2: $("mk2"), identity: $("identity"), concatPrefix: $("concat-prefix"),
   setupSave: $("setup-save"), setupHint: $("setup-hint"),
 };
 
 let status = null;
 let suggestions = [];
 let active = -1;
-let loadedParams = null; // params for the site currently shown in "advanced"
+let loadedParams = null; // SiteParams for the current input
 let loadedFor = null; // raw input value loadedParams belongs to
 let busy = false;
 
@@ -33,6 +35,16 @@ function showMessage(text, kind = "error") {
 
 function errorText(e) {
   return typeof e === "string" ? e : (e && e.message) || String(e);
+}
+
+/** Splits the input into the site text and whether "!!" forces concat. */
+function parseInput() {
+  const raw = el.site.value;
+  const trimmed = raw.trim();
+  if (trimmed.startsWith(CONCAT_MARK)) {
+    return { text: trimmed.slice(CONCAT_MARK.length).trim(), forceConcat: true };
+  }
+  return { text: trimmed, forceConcat: false };
 }
 
 // ---------- status / views ----------
@@ -64,7 +76,7 @@ async function refresh() {
     el.hints.classList.add("hidden");
     el.setup.classList.remove("hidden");
     el.identity.value = status.identity || "";
-    el.mk1.value = el.mk2.value = "";
+    el.mk1.value = el.mk2.value = el.concatPrefix.value = "";
     el.setupHint.textContent = "";
     el.mk1.focus();
   }
@@ -109,16 +121,15 @@ function renderSuggestions() {
 }
 
 async function updateSuggestions() {
-  const q = el.site.value;
+  const { text } = parseInput();
   try {
-    suggestions = await invoke("suggest", { query: q });
+    suggestions = await invoke("suggest", { query: text });
   } catch {
     suggestions = [];
   }
-  // Don't suggest exactly what is typed.
-  suggestions = suggestions.filter((s) => s !== q.trim().toLowerCase());
+  suggestions = suggestions.filter((s) => s !== text);
   active = -1;
-  if (q.trim() === "" && document.activeElement !== el.site) {
+  if (text === "" && document.activeElement !== el.site) {
     hideSuggestions();
     return;
   }
@@ -126,7 +137,8 @@ async function updateSuggestions() {
 }
 
 function pick(site) {
-  el.site.value = site;
+  const { forceConcat } = parseInput();
+  el.site.value = (forceConcat ? CONCAT_MARK : "") + site;
   hideSuggestions();
   loadParams();
   el.site.focus();
@@ -140,24 +152,61 @@ function scheduleLoadParams() {
   paramsTimer = setTimeout(loadParams, 150);
 }
 
-async function loadParams() {
-  const raw = el.site.value;
-  const site = raw.trim();
-  if (!site) {
+function selectedMode() {
+  return document.querySelector('input[name="mode"]:checked')?.value || "derived";
+}
+
+function setModeUi(mode) {
+  document.querySelectorAll('input[name="mode"]').forEach((r) => (r.checked = r.value === mode));
+  el.advanced.classList.toggle("concat", mode === "concat");
+}
+
+function renderInfo() {
+  const p = currentParams();
+  if (!p) {
     el.siteInfo.textContent = "";
-    loadedParams = null;
-    loadedFor = null;
     return;
   }
-  const p = await invoke("site_params", { site });
+  el.siteInfo.innerHTML = "";
+  const tag = document.createElement("span");
+  const text = document.createElement("span");
+  if (p.mode === "concat") {
+    tag.className = "tag concat";
+    tag.textContent = "拼接";
+    text.textContent = ` 前缀 + ${p.literal}`;
+    if (status && !status.has_concat_prefix) {
+      text.textContent += "（未设置前缀，请到设置中填写）";
+    }
+  } else {
+    const r = p.rules;
+    const kinds = [r.lowercase && "小写", r.uppercase && "大写", r.digits && "数字", r.symbols && "符号"].filter(Boolean);
+    tag.className = "tag";
+    tag.textContent = "新算法";
+    text.textContent =
+      ` ${p.site} · ${r.length} 位 · ${kinds.join("/")}` + (p.counter > 1 ? ` · 第 ${p.counter} 版` : "");
+  }
+  if (p.username) text.textContent += ` · ${p.username}`;
+  el.siteInfo.append(tag, text);
+}
+
+async function loadParams() {
+  const raw = el.site.value;
+  const { text, forceConcat } = parseInput();
+  if (!text) {
+    loadedParams = null;
+    loadedFor = null;
+    renderInfo();
+    return;
+  }
+  const p = await invoke("site_params", { site: text });
+  if (forceConcat) p.mode = "concat";
+  // Concat uses exactly what was typed (or picked from history).
+  p.literal = text;
   loadedParams = p;
   loadedFor = raw;
+
   const r = p.rules;
-  const kinds = [r.lowercase && "小写", r.uppercase && "大写", r.digits && "数字", r.symbols && "符号"].filter(Boolean);
-  el.siteInfo.textContent =
-    `${p.site} · ${r.length} 位 · ${kinds.join("/")}` +
-    (p.counter > 1 ? ` · 第 ${p.counter} 版` : "") +
-    (p.username ? ` · ${p.username}` : "");
+  setModeUi(p.mode);
   el.length.value = r.length;
   el.counter.value = p.counter;
   el.lower.checked = r.lowercase;
@@ -165,6 +214,7 @@ async function loadParams() {
   el.digits.checked = r.digits;
   el.symbols.value = r.symbols;
   el.username.value = p.username;
+  renderInfo();
 }
 
 function currentParams() {
@@ -172,6 +222,8 @@ function currentParams() {
   if (el.advanced.classList.contains("hidden")) return loadedParams;
   return {
     site: loadedParams.site,
+    mode: selectedMode(),
+    literal: loadedParams.literal,
     counter: Math.max(1, parseInt(el.counter.value, 10) || 1),
     username: el.username.value,
     rules: {
@@ -191,7 +243,7 @@ async function submit(alternate) {
   if (active >= 0 && suggestions[active]) {
     pick(suggestions[active]);
   }
-  if (!el.site.value.trim()) {
+  if (!parseInput().text) {
     showMessage("请输入站点名", "warn");
     return;
   }
@@ -228,8 +280,12 @@ async function saveSetup() {
   el.setupSave.disabled = true;
   el.setupHint.textContent = "正在计算（需要约 1 秒）…";
   try {
-    const fp = await invoke("setup_master_key", { masterKey: a, identity: el.identity.value });
-    el.mk1.value = el.mk2.value = "";
+    const fp = await invoke("setup_master_key", {
+      masterKey: a,
+      identity: el.identity.value,
+      concatPrefix: el.concatPrefix.value || null,
+    });
+    el.mk1.value = el.mk2.value = el.concatPrefix.value = "";
     await refresh();
     showMessage(`主密钥已保存。校验码 ${fp}：在其他设备上设置时应得到相同的校验码。`, "ok");
   } catch (e) {
@@ -255,10 +311,21 @@ el.toggleAdvanced.addEventListener("click", async () => {
   el.advanced.classList.toggle("hidden");
   el.toggleAdvanced.textContent = opening ? "选项 ▴" : "选项 ▾";
   if (opening) await loadParamsIfStale();
+  renderInfo();
 });
 
+document.querySelectorAll('input[name="mode"]').forEach((r) =>
+  r.addEventListener("change", () => {
+    setModeUi(selectedMode());
+    renderInfo();
+  })
+);
+[el.length, el.counter, el.lower, el.upper, el.digits, el.symbols, el.username].forEach((i) =>
+  i.addEventListener("change", renderInfo)
+);
+
 el.setupSave.addEventListener("click", saveSetup);
-[el.mk1, el.mk2, el.identity].forEach((i) =>
+[el.mk1, el.mk2, el.identity, el.concatPrefix].forEach((i) =>
   i.addEventListener("keydown", (e) => {
     if (e.key === "Enter") saveSetup();
   })

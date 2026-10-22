@@ -14,7 +14,7 @@
         "title": "EasyPassword",
         "url": "popup.html",
         "width": 440,
-        "height": 330,
+        "height": 410,
         "resizable": false,
         "maximizable": false,
         "minimizable": false,

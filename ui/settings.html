@@ -37,6 +37,27 @@
     </div>
   </section>
 
+  <h2>旧版拼接密码</h2>
+  <section>
+    <div class="small muted">旧版 EasyPassword 的 <code>!!站点</code> 密码 = 拼接前缀 + 站点名（原样）。前缀就是旧 config.toml 里的 <code>master_key</code>，保存在系统钥匙串中。</div>
+    <div class="row">
+      <span class="grow" id="prefix-state"></span>
+      <button class="danger" id="forget-prefix">移除</button>
+    </div>
+    <div class="row">
+      <input id="prefix" type="password" class="grow" placeholder="设置/更换拼接前缀" autocomplete="off">
+      <button id="save-prefix">保存前缀</button>
+    </div>
+    <div>
+      <div class="muted small" style="margin-bottom:4px">新站点默认使用</div>
+      <div class="checks">
+        <label><input type="radio" name="default-mode" value="concat">拼接（旧密码）</label>
+        <label><input type="radio" name="default-mode" value="derived">新算法（推荐）</label>
+      </div>
+      <div class="small muted" style="margin-top:4px">已经用过的站点会一直保持它当时的方式，修改这里不会改变已有密码。弹窗中输入 <code>!!站点</code> 可强制使用拼接。</div>
+    </div>
+  </section>
+
   <h2>使用</h2>
   <section>
     <label>全局快捷键
@@ -80,7 +101,7 @@
       <button id="forget-history">清除历史</button>
     </div>
     <table>
-      <thead><tr><th>站点</th><th>版本</th><th>长度</th><th>用户名</th><th>最后使用</th><th></th></tr></thead>
+      <thead><tr><th>站点</th><th>方式</th><th>版本</th><th>长度</th><th>用户名</th><th>最后使用</th><th></th></tr></thead>
       <tbody id="sites"></tbody>
     </table>
     <div class="small muted">“版本”在需要更换某个站点的密码时 +1。只有自定义过的设置会被保存。</div>

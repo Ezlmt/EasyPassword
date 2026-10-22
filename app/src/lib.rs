@@ -47,6 +47,8 @@ pub fn run() {
             commands::get_status,
             commands::setup_master_key,
             commands::forget_master_key,
+            commands::set_concat_prefix,
+            commands::forget_concat_prefix,
             commands::suggest,
             commands::site_params,
             commands::submit,

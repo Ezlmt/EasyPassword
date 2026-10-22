@@ -3,6 +3,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::{Mutex, MutexGuard};
 
 use easypassword_core::{MasterSeed, Settings};
+use zeroize::Zeroizing;
 
 /// Process-wide state, managed by Tauri.
 pub struct AppState {
@@ -10,6 +11,8 @@ pub struct AppState {
     pub settings: Mutex<Settings>,
     /// `None` until the keychain has been read; `Some(None)` = no key set up.
     pub seed: Mutex<Option<Option<MasterSeed>>>,
+    /// Same lazy scheme for the legacy concat prefix.
+    pub concat_prefix: Mutex<Option<Option<Zeroizing<String>>>>,
     /// Bumped on every clipboard write so stale "clear" timers do nothing.
     pub clipboard_generation: AtomicU64,
     /// Window that was focused before the popup opened (Windows HWND).
@@ -23,6 +26,7 @@ impl AppState {
             settings_path,
             settings: Mutex::new(settings),
             seed: Mutex::new(None),
+            concat_prefix: Mutex::new(None),
             clipboard_generation: AtomicU64::new(0),
             previous_window: Mutex::new(0),
         }
@@ -45,6 +49,19 @@ impl AppState {
 
     pub fn set_seed(&self, seed: Option<MasterSeed>) {
         *lock(&self.seed) = Some(seed);
+    }
+
+    /// Returns the cached concat prefix, reading the keychain on first use.
+    pub fn concat_prefix(&self) -> Result<Option<Zeroizing<String>>, String> {
+        let mut guard = lock(&self.concat_prefix);
+        if guard.is_none() {
+            *guard = Some(crate::keystore::load_prefix()?);
+        }
+        Ok(guard.as_ref().and_then(|p| p.clone()))
+    }
+
+    pub fn set_concat_prefix(&self, prefix: Option<Zeroizing<String>>) {
+        *lock(&self.concat_prefix) = Some(prefix);
     }
 }
 

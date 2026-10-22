@@ -6,14 +6,16 @@ pub mod algorithm;
 pub mod config;
 pub mod site;
 
-pub use algorithm::{generate, MasterSeed, Rules};
-pub use config::{OutputMode, Settings, SiteEntry, SiteParams};
+pub use algorithm::{concat, generate, MasterSeed, Rules};
+pub use config::{Mode, OutputMode, Settings, SiteEntry, SiteParams};
 pub use site::normalize_site;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("master key must not be empty")]
     EmptyMasterKey,
+    #[error("concatenation prefix is not set")]
+    EmptyConcatPrefix,
     #[error("site must not be empty")]
     EmptySite,
     #[error("enable at least one character type")]

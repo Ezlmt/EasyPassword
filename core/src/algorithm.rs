@@ -211,6 +211,23 @@ pub fn generate(
     Ok(render(&okm, &classes, rules.length))
 }
 
+/// Legacy EasyPassword 0.x "concatenation" password: `prefix + site`,
+/// byte for byte, with the site exactly as typed (only surrounding whitespace
+/// is trimmed; no lower-casing or URL handling, to stay identical to 0.x).
+pub fn concat(prefix: &str, site_literal: &str) -> Result<Zeroizing<String>, Error> {
+    if prefix.is_empty() {
+        return Err(Error::EmptyConcatPrefix);
+    }
+    let site = site_literal.trim();
+    if site.is_empty() {
+        return Err(Error::EmptySite);
+    }
+    let mut out = Zeroizing::new(String::with_capacity(prefix.len() + site.len()));
+    out.push_str(prefix);
+    out.push_str(site);
+    Ok(out)
+}
+
 /// Base-converts `entropy` into `length` characters: `length - k` from the
 /// union alphabet, then one from each of the `k` classes inserted at a derived
 /// position, guaranteeing every enabled class appears.
@@ -275,6 +292,17 @@ mod tests {
 
     fn test_seed(byte: u8) -> MasterSeed {
         MasterSeed::from_bytes(&[byte; 32]).unwrap()
+    }
+
+    #[test]
+    fn concat_matches_legacy_behaviour() {
+        // Same expectations as the 0.x test-suite.
+        assert_eq!(concat("master", "github.com").unwrap().as_str(), "mastergithub.com");
+        assert_eq!(concat("master", "GitHub.com").unwrap().as_str(), "masterGitHub.com");
+        assert_eq!(concat("master!", "github.com").unwrap().as_str(), "master!github.com");
+        assert_eq!(concat("m ", " www.x.com ").unwrap().as_str(), "m www.x.com");
+        assert!(matches!(concat("", "x"), Err(Error::EmptyConcatPrefix)));
+        assert!(matches!(concat("m", "  "), Err(Error::EmptySite)));
     }
 
     #[test]
